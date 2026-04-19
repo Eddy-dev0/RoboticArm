@@ -87,10 +87,10 @@ void loop() {
 
     for (int i = 0; i < TOTAL_SERVOS; i++) {
       float diff = targetPositions[i] - currentPositions[i];
-      
+
       if (abs(diff) > THRESHOLD) {
         allReached = false;
-        
+
         if (currentSpeed <= NO_SMOOTH_THRESHOLD) {
           // Movimiento seco para velocidades <= 50
           float step = (diff > 0) ? min(diff, 1.0) : max(diff, -1.0);
@@ -104,18 +104,18 @@ void loop() {
           }
           currentPositions[i] += step;
         }
-        
+
         // Aseguramos que no nos pasemos del objetivo
         if ((diff > 0 && currentPositions[i] > targetPositions[i]) ||
             (diff < 0 && currentPositions[i] < targetPositions[i])) {
           currentPositions[i] = targetPositions[i];
         }
-        
+
         if (i == 5) { // Servo del antebrazo
           float oppositePosition = 180 - currentPositions[i];
           pwm.setPWM(OPPOSITE_SERVO_CHANNEL, 0, angleToPulse(oppositePosition));
         }
-        
+
         pwm.setPWM(servoChannels[i], 0, angleToPulse(currentPositions[i]));
       }
     }
@@ -131,6 +131,12 @@ void loop() {
 
 void processSerialCommand(String command) {
   command.trim();
+
+  // Erweiterung für UART-Bridge/Test-Demo:
+  // Erlaubt alternative Form: "S7 120" zusätzlich zum bestehenden "7 120"
+  if (command.startsWith("S") && command.length() > 1 && isDigit(command.charAt(1))) {
+    command = command.substring(1);
+  }
 
   if (command.startsWith("MODE")) {
     autoMode = command.substring(5).toInt() == 1;
@@ -156,17 +162,17 @@ void processSerialCommand(String command) {
 
     if (servoIndex >= 0 && servoIndex < TOTAL_SERVOS &&
         position >= MIN_SERVO_VALUE && position <= MAX_SERVO_VALUE) {
-      
+
       targetPositions[servoIndex] = position;
-      
+
       if (!autoMode) {
         currentPositions[servoIndex] = position;
-        
+
         if (servoIndex == 5) {
           float oppositePosition = 180 - position;
           pwm.setPWM(OPPOSITE_SERVO_CHANNEL, 0, angleToPulse(oppositePosition));
         }
-        
+
         pwm.setPWM(servoChannels[servoIndex], 0, angleToPulse(position));
       } else {
         receivedPositions++;
@@ -189,4 +195,3 @@ void serialEvent() {
     }
   }
 }
-
