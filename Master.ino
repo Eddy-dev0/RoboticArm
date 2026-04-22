@@ -17,6 +17,8 @@ const int BUTTON_CCW_PIN = 14;
 // Zusätzliche Taster für Servo an Shield-Pin 0
 const int BUTTON_SERVO0_CCW_PIN = 2;
 const int BUTTON_SERVO0_CW_PIN = 4;
+const bool BUTTON_SERVO0_CCW_ACTIVE_LOW = true;
+const bool BUTTON_SERVO0_CW_ACTIVE_LOW = true;
 
 // MAC-Adresse vom EMPFÄNGER-ESP32 hier eintragen!
 uint8_t receiverMAC[] = {0x80, 0xF3, 0xDA, 0xBA, 0xA3, 0xF8};
@@ -40,6 +42,11 @@ typedef struct struct_message {
 
 struct_message dataToSend;
 
+bool readButtonState(int pin, bool activeLow) {
+  int raw = digitalRead(pin);
+  return activeLow ? (raw == LOW) : (raw == HIGH);
+}
+
 // Callback nach dem Senden
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
   Serial.print("Sendestatus: ");
@@ -52,9 +59,10 @@ void setup() {
   pinMode(BUTTON_CW_PIN, INPUT_PULLUP);
   pinMode(BUTTON_RESET_PIN, INPUT_PULLUP);
   pinMode(BUTTON_CCW_PIN, INPUT_PULLUP);
-  // D2/D4 sind separat verdrahtet (aktiv HIGH)
-  pinMode(BUTTON_SERVO0_CCW_PIN, INPUT_PULLDOWN);
-  pinMode(BUTTON_SERVO0_CW_PIN, INPUT_PULLDOWN);
+  // D2/D4 standardmäßig wie die restlichen Taster als INPUT_PULLUP (aktiv LOW)
+  // Falls extern aktiv HIGH verdrahtet: *_ACTIVE_LOW oben auf false setzen.
+  pinMode(BUTTON_SERVO0_CCW_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_SERVO0_CW_PIN, INPUT_PULLUP);
   pinMode(joy1SW, INPUT_PULLUP);
   pinMode(joy2SW, INPUT_PULLUP);
 
@@ -95,9 +103,8 @@ void loop() {
   dataToSend.rotateCwPressed = (digitalRead(BUTTON_CW_PIN) == LOW);
   dataToSend.rotateCcwPressed = (digitalRead(BUTTON_CCW_PIN) == LOW);
   dataToSend.resetPressed = (digitalRead(BUTTON_RESET_PIN) == LOW);
-  // D2/D4 aktiv HIGH
-  dataToSend.servo0CcwPressed = (digitalRead(BUTTON_SERVO0_CCW_PIN) == HIGH);
-  dataToSend.servo0CwPressed = (digitalRead(BUTTON_SERVO0_CW_PIN) == HIGH);
+  dataToSend.servo0CcwPressed = readButtonState(BUTTON_SERVO0_CCW_PIN, BUTTON_SERVO0_CCW_ACTIVE_LOW);
+  dataToSend.servo0CwPressed = readButtonState(BUTTON_SERVO0_CW_PIN, BUTTON_SERVO0_CW_ACTIVE_LOW);
 
   esp_err_t result = esp_now_send(receiverMAC, (uint8_t *)&dataToSend, sizeof(dataToSend));
 

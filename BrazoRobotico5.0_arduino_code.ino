@@ -29,6 +29,7 @@ bool isMoving = false;
 int receivedPositions = 0;
 String inputBuffer = "";
 bool inputComplete = false;
+int lastPulseByChannel[16];
 
 // Valores ajustables para control de velocidad
 const float MAX_SMOOTH_FACTOR = 0.05;
@@ -57,6 +58,14 @@ int getMovementDelay() {
   return map(currentSpeed, 0, 100, MAX_DELAY, MIN_DELAY);
 }
 
+void setServoAngleIfChanged(int channel, float angle) {
+  int pulse = angleToPulse(angle);
+  if (lastPulseByChannel[channel] != pulse) {
+    pwm.setPWM(channel, 0, pulse);
+    lastPulseByChannel[channel] = pulse;
+  }
+}
+
 void setup() {
   Serial.begin(9600);
   inputBuffer.reserve(200);
@@ -65,13 +74,17 @@ void setup() {
   pwm.setPWMFreq(PULSE_FREQ);
   Wire.setClock(400000);
 
+  for (int i = 0; i < 16; i++) {
+    lastPulseByChannel[i] = -1;
+  }
+
   // Inicializar posiciones
   for (int i = 0; i < TOTAL_SERVOS; i++) {
     currentPositions[i] = 90;
     targetPositions[i] = 90;
-    pwm.setPWM(servoChannels[i], 0, angleToPulse(90));
+    setServoAngleIfChanged(servoChannels[i], 90);
   }
-  pwm.setPWM(LINKED_SERVO_CHANNEL, 0, angleToPulse(90));
+  setServoAngleIfChanged(LINKED_SERVO_CHANNEL, 90);
 }
 
 void loop() {
@@ -112,10 +125,10 @@ void loop() {
         }
 
         if (i == 5) { // Servo del antebrazo -> Channel 6 gleichlaufend mit Channel 5
-          pwm.setPWM(LINKED_SERVO_CHANNEL, 0, angleToPulse(currentPositions[i]));
+          setServoAngleIfChanged(LINKED_SERVO_CHANNEL, currentPositions[i]);
         }
 
-        pwm.setPWM(servoChannels[i], 0, angleToPulse(currentPositions[i]));
+        setServoAngleIfChanged(servoChannels[i], currentPositions[i]);
       }
     }
 
@@ -165,13 +178,16 @@ void processSerialCommand(String command) {
       targetPositions[servoIndex] = position;
 
       if (!autoMode) {
+        if (abs(position - currentPositions[servoIndex]) < THRESHOLD) {
+          return;
+        }
         currentPositions[servoIndex] = position;
 
         if (servoIndex == 5) {
-          pwm.setPWM(LINKED_SERVO_CHANNEL, 0, angleToPulse(position));
+          setServoAngleIfChanged(LINKED_SERVO_CHANNEL, position);
         }
 
-        pwm.setPWM(servoChannels[servoIndex], 0, angleToPulse(position));
+        setServoAngleIfChanged(servoChannels[servoIndex], position);
       } else {
         receivedPositions++;
         if (receivedPositions == TOTAL_SERVOS) {
