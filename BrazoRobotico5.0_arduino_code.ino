@@ -13,7 +13,7 @@ const int NO_SMOOTH_THRESHOLD = 50;
 
 // Mapeo de servos a canales del shield
 const int servoChannels[TOTAL_SERVOS] = {0, 1, 2, 3, 4, 5, 7}; // Garra, Muñeca1, Muñeca2, BrazoSup, BrazoInf, Antebrazo, Base
-const int OPPOSITE_SERVO_CHANNEL = 6;
+const int LINKED_SERVO_CHANNEL = 6; // folgt Servo auf Channel 5 gleichlaufend
 
 // Rangos de pulso para los servos (500-2500µs)
 const int SERVO_MIN_PULSE = 500;
@@ -71,7 +71,7 @@ void setup() {
     targetPositions[i] = 90;
     pwm.setPWM(servoChannels[i], 0, angleToPulse(90));
   }
-  pwm.setPWM(OPPOSITE_SERVO_CHANNEL, 0, angleToPulse(90));
+  pwm.setPWM(LINKED_SERVO_CHANNEL, 0, angleToPulse(90));
 }
 
 void loop() {
@@ -111,9 +111,8 @@ void loop() {
           currentPositions[i] = targetPositions[i];
         }
 
-        if (i == 5) { // Servo del antebrazo
-          float oppositePosition = 180 - currentPositions[i];
-          pwm.setPWM(OPPOSITE_SERVO_CHANNEL, 0, angleToPulse(oppositePosition));
+        if (i == 5) { // Servo del antebrazo -> Channel 6 gleichlaufend mit Channel 5
+          pwm.setPWM(LINKED_SERVO_CHANNEL, 0, angleToPulse(currentPositions[i]));
         }
 
         pwm.setPWM(servoChannels[i], 0, angleToPulse(currentPositions[i]));
@@ -169,8 +168,7 @@ void processSerialCommand(String command) {
         currentPositions[servoIndex] = position;
 
         if (servoIndex == 5) {
-          float oppositePosition = 180 - position;
-          pwm.setPWM(OPPOSITE_SERVO_CHANNEL, 0, angleToPulse(oppositePosition));
+          pwm.setPWM(LINKED_SERVO_CHANNEL, 0, angleToPulse(position));
         }
 
         pwm.setPWM(servoChannels[servoIndex], 0, angleToPulse(position));
