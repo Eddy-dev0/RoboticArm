@@ -18,9 +18,11 @@ const int SERVO_MAX_ANGLE = 180;
 const int BASE_SERVO_STEP_ANGLE = 2;
 const int FAST_BUTTON_STEP_ANGLE = BASE_SERVO_STEP_ANGLE * 5; // 5x schneller für D12/D14
 const int JOYSTICK_BUTTON_STEP_ANGLE = BASE_SERVO_STEP_ANGLE * 4; // Pin 7 über Joystick-Buttons 4x schneller
+const int SERVO0_BUTTON_STEP_ANGLE = BASE_SERVO_STEP_ANGLE * 3; // D2/D4 etwas kräftiger
 const unsigned long MOVE_REPEAT_MS = 50;
 const int DEFAULT_JOYSTICK_CENTER = 2048;
-const int JOYSTICK_DEADZONE = 380;
+const int JOYSTICK_DEADZONE = 460;
+const int MIN_AXIS_STEP_TRIGGER = 2;
 
 // Entprellzeit für Reset-Taster
 const unsigned long BUTTON_DEBOUNCE_MS = 120;
@@ -113,6 +115,9 @@ int mapJoystickToStep(int axisValue, int axisCenter) {
   int maxDelta = DEFAULT_JOYSTICK_CENTER - JOYSTICK_DEADZONE;
   int clampedDelta = min(absDelta - JOYSTICK_DEADZONE, maxDelta);
   int step = map(clampedDelta, 0, maxDelta, 1, 10);
+  if (step < MIN_AXIS_STEP_TRIGGER) {
+    return 0;
+  }
   return (delta > 0) ? step : -step;
 }
 
@@ -165,9 +170,9 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
     // Servo 0: D2/D4
     if (receivedData.servo0CwPressed && !receivedData.servo0CcwPressed) {
-      moveServoWithStep(1, BASE_SERVO_STEP_ANGLE);
+      moveServoWithStep(1, SERVO0_BUTTON_STEP_ANGLE);
     } else if (receivedData.servo0CcwPressed && !receivedData.servo0CwPressed) {
-      moveServoWithStep(1, -BASE_SERVO_STEP_ANGLE);
+      moveServoWithStep(1, -SERVO0_BUTTON_STEP_ANGLE);
     }
 
     // Joystick 1 Y -> Servo 5 und 6 gleichlaufend (im Arduino: Index 6 steuert Pin 5+6)
