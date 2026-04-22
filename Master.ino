@@ -20,6 +20,9 @@ const int BUTTON_SERVO0_CW_PIN = 22;
 const int BUTTON_SERVO0_CCW_PIN = 23;
 const bool BUTTON_SERVO0_CCW_ACTIVE_LOW = true;
 const bool BUTTON_SERVO0_CW_ACTIVE_LOW = true;
+const int STATUS_LED_PIN = 19;
+const unsigned long STATUS_LED_BLINK_MS = 300;
+const unsigned long CONNECTION_TIMEOUT_MS = 1000;
 
 // MAC-Adresse vom EMPFÄNGER-ESP32 hier eintragen!
 uint8_t receiverMAC[] = {0x80, 0xF3, 0xDA, 0xBA, 0xA3, 0xF8};
@@ -42,6 +45,10 @@ typedef struct struct_message {
 } struct_message;
 
 struct_message dataToSend;
+bool slaveConnected = false;
+unsigned long lastSuccessSendMs = 0;
+unsigned long lastBlinkToggleMs = 0;
+bool blinkLedState = false;
 
 bool readButtonState(int pin, bool activeLow) {
   int raw = digitalRead(pin);
@@ -52,6 +59,25 @@ bool readButtonState(int pin, bool activeLow) {
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
   Serial.print("Sendestatus: ");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Erfolgreich" : "Fehler");
+  if (status == ESP_NOW_SEND_SUCCESS) {
+    lastSuccessSendMs = millis();
+  }
+}
+
+void updateStatusLed() {
+  unsigned long now = millis();
+  slaveConnected = (now - lastSuccessSendMs) <= CONNECTION_TIMEOUT_MS;
+
+  if (slaveConnected) {
+    digitalWrite(STATUS_LED_PIN, HIGH);
+    return;
+  }
+
+  if (now - lastBlinkToggleMs >= STATUS_LED_BLINK_MS) {
+    blinkLedState = !blinkLedState;
+    lastBlinkToggleMs = now;
+  }
+  digitalWrite(STATUS_LED_PIN, blinkLedState ? HIGH : LOW);
 }
 
 void setup() {
@@ -66,6 +92,8 @@ void setup() {
   pinMode(BUTTON_SERVO0_CW_PIN, INPUT_PULLUP);
   pinMode(joy1SW, INPUT_PULLUP);
   pinMode(joy2SW, INPUT_PULLUP);
+  pinMode(STATUS_LED_PIN, OUTPUT);
+  digitalWrite(STATUS_LED_PIN, LOW);
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
@@ -113,6 +141,8 @@ void loop() {
     Serial.println("Fehler beim Senden");
   }
 
+  updateStatusLed();
+
   Serial.print("CW: ");
   Serial.print(dataToSend.rotateCwPressed);
   Serial.print(" | CCW: ");
@@ -126,7 +156,9 @@ void loop() {
   Serial.print(" | J1X: ");
   Serial.print(dataToSend.joy1X);
   Serial.print(" | J2X: ");
-  Serial.println(dataToSend.joy2X);
+  Serial.print(dataToSend.joy2X);
+  Serial.print(" | LED(D19): ");
+  Serial.println(slaveConnected ? "AN (verbunden)" : "BLINKT (suche)");
 
   delay(50);
 }
