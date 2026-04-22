@@ -15,8 +15,9 @@ const int BUTTON_CW_PIN = 12;
 const int BUTTON_RESET_PIN = 13;
 const int BUTTON_CCW_PIN = 14;
 // Zusätzliche Taster für Servo an Shield-Pin 0
-const int BUTTON_SERVO0_CCW_PIN = 2;
-const int BUTTON_SERVO0_CW_PIN = 4;
+// D22 = im Uhrzeigersinn, D23 = gegen Uhrzeigersinn
+const int BUTTON_SERVO0_CW_PIN = 22;
+const int BUTTON_SERVO0_CCW_PIN = 23;
 const bool BUTTON_SERVO0_CCW_ACTIVE_LOW = true;
 const bool BUTTON_SERVO0_CW_ACTIVE_LOW = true;
 
@@ -59,7 +60,7 @@ void setup() {
   pinMode(BUTTON_CW_PIN, INPUT_PULLUP);
   pinMode(BUTTON_RESET_PIN, INPUT_PULLUP);
   pinMode(BUTTON_CCW_PIN, INPUT_PULLUP);
-  // D2/D4 standardmäßig wie die restlichen Taster als INPUT_PULLUP (aktiv LOW)
+  // D22/D23 standardmäßig wie die restlichen Taster als INPUT_PULLUP (aktiv LOW)
   // Falls extern aktiv HIGH verdrahtet: *_ACTIVE_LOW oben auf false setzen.
   pinMode(BUTTON_SERVO0_CCW_PIN, INPUT_PULLUP);
   pinMode(BUTTON_SERVO0_CW_PIN, INPUT_PULLUP);
@@ -118,9 +119,9 @@ void loop() {
   Serial.print(dataToSend.rotateCcwPressed);
   Serial.print(" | RESET: ");
   Serial.print(dataToSend.resetPressed);
-  Serial.print(" | S0_CCW(D2): ");
+  Serial.print(" | S0_CCW(D23): ");
   Serial.print(dataToSend.servo0CcwPressed);
-  Serial.print(" | S0_CW(D4): ");
+  Serial.print(" | S0_CW(D22): ");
   Serial.print(dataToSend.servo0CwPressed);
   Serial.print(" | J1X: ");
   Serial.print(dataToSend.joy1X);
