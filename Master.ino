@@ -52,8 +52,9 @@ void setup() {
   pinMode(BUTTON_CW_PIN, INPUT_PULLUP);
   pinMode(BUTTON_RESET_PIN, INPUT_PULLUP);
   pinMode(BUTTON_CCW_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_SERVO0_CCW_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_SERVO0_CW_PIN, INPUT_PULLUP);
+  // D2/D4 sind separat verdrahtet (aktiv HIGH)
+  pinMode(BUTTON_SERVO0_CCW_PIN, INPUT_PULLDOWN);
+  pinMode(BUTTON_SERVO0_CW_PIN, INPUT_PULLDOWN);
   pinMode(joy1SW, INPUT_PULLUP);
   pinMode(joy2SW, INPUT_PULLUP);
 
@@ -94,8 +95,9 @@ void loop() {
   dataToSend.rotateCwPressed = (digitalRead(BUTTON_CW_PIN) == LOW);
   dataToSend.rotateCcwPressed = (digitalRead(BUTTON_CCW_PIN) == LOW);
   dataToSend.resetPressed = (digitalRead(BUTTON_RESET_PIN) == LOW);
-  dataToSend.servo0CcwPressed = (digitalRead(BUTTON_SERVO0_CCW_PIN) == LOW);
-  dataToSend.servo0CwPressed = (digitalRead(BUTTON_SERVO0_CW_PIN) == LOW);
+  // D2/D4 aktiv HIGH
+  dataToSend.servo0CcwPressed = (digitalRead(BUTTON_SERVO0_CCW_PIN) == HIGH);
+  dataToSend.servo0CwPressed = (digitalRead(BUTTON_SERVO0_CW_PIN) == HIGH);
 
   esp_err_t result = esp_now_send(receiverMAC, (uint8_t *)&dataToSend, sizeof(dataToSend));
 

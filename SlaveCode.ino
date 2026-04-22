@@ -17,9 +17,10 @@ const int SERVO_MIN_ANGLE = 0;
 const int SERVO_MAX_ANGLE = 180;
 const int BASE_SERVO_STEP_ANGLE = 2;
 const int FAST_BUTTON_STEP_ANGLE = BASE_SERVO_STEP_ANGLE * 5; // 5x schneller für D12/D14
+const int JOYSTICK_BUTTON_STEP_ANGLE = BASE_SERVO_STEP_ANGLE * 4; // Pin 7 über Joystick-Buttons 4x schneller
 const unsigned long MOVE_REPEAT_MS = 50;
-const int JOYSTICK_CENTER = 2048;
-const int JOYSTICK_DEADZONE = 250;
+const int DEFAULT_JOYSTICK_CENTER = 2048;
+const int JOYSTICK_DEADZONE = 380;
 
 // Entprellzeit für Reset-Taster
 const unsigned long BUTTON_DEBOUNCE_MS = 120;
@@ -29,6 +30,14 @@ unsigned long lastMoveStepTime = 0;
 bool lastResetPressed = false;
 int lastSentAngle[8];
 int currentServoAngles[8];
+int filteredJoy1X = DEFAULT_JOYSTICK_CENTER;
+int filteredJoy1Y = DEFAULT_JOYSTICK_CENTER;
+int filteredJoy2X = DEFAULT_JOYSTICK_CENTER;
+int filteredJoy2Y = DEFAULT_JOYSTICK_CENTER;
+int joy1XCenter = DEFAULT_JOYSTICK_CENTER;
+int joy1YCenter = DEFAULT_JOYSTICK_CENTER;
+int joy2XCenter = DEFAULT_JOYSTICK_CENTER;
+int joy2YCenter = DEFAULT_JOYSTICK_CENTER;
 
 // Daten vom Master
 typedef struct struct_message {
@@ -82,14 +91,26 @@ void sendResetAllToArduino() {
   Serial.println("Alle Servos RESET -> 90°");
 }
 
-int mapJoystickToStep(int axisValue) {
-  int delta = axisValue - JOYSTICK_CENTER;
+int applyAxisFilter(int previousValue, int rawValue) {
+  // Einfache Glättung gegen Zittern
+  return (previousValue * 3 + rawValue) / 4;
+}
+
+void updateAxisCenter(int &centerValue, int filteredValue) {
+  // Langsames Nachführen nur in Center-Nähe
+  if (abs(filteredValue - centerValue) < 250) {
+    centerValue = (centerValue * 31 + filteredValue) / 32;
+  }
+}
+
+int mapJoystickToStep(int axisValue, int axisCenter) {
+  int delta = axisValue - axisCenter;
   int absDelta = abs(delta);
   if (absDelta <= JOYSTICK_DEADZONE) {
     return 0;
   }
 
-  int maxDelta = JOYSTICK_CENTER - JOYSTICK_DEADZONE;
+  int maxDelta = DEFAULT_JOYSTICK_CENTER - JOYSTICK_DEADZONE;
   int clampedDelta = min(absDelta - JOYSTICK_DEADZONE, maxDelta);
   int step = map(clampedDelta, 0, maxDelta, 1, 10);
   return (delta > 0) ? step : -step;
@@ -137,9 +158,9 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
     // Servo 7: Joystick-Buttons
     if (receivedData.joy1Pressed && !receivedData.joy2Pressed) {
-      moveServoWithStep(7, BASE_SERVO_STEP_ANGLE);
+      moveServoWithStep(7, JOYSTICK_BUTTON_STEP_ANGLE);
     } else if (receivedData.joy2Pressed && !receivedData.joy1Pressed) {
-      moveServoWithStep(7, -BASE_SERVO_STEP_ANGLE);
+      moveServoWithStep(7, -JOYSTICK_BUTTON_STEP_ANGLE);
     }
 
     // Servo 0: D2/D4
@@ -150,22 +171,30 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     }
 
     // Joystick 1 Y -> Servo 5 und 6 gleichlaufend (im Arduino: Index 6 steuert Pin 5+6)
-    int joy1YStep = mapJoystickToStep(receivedData.joy1Y);
+    filteredJoy1Y = applyAxisFilter(filteredJoy1Y, receivedData.joy1Y);
+    updateAxisCenter(joy1YCenter, filteredJoy1Y);
+    int joy1YStep = mapJoystickToStep(filteredJoy1Y, joy1YCenter);
     // Nach unten -> gegen Uhrzeigersinn, nach oben -> im Uhrzeigersinn
     moveServoWithStep(6, -joy1YStep);
 
     // Joystick 1 X -> Servo 4
-    int joy1XStep = mapJoystickToStep(receivedData.joy1X);
+    filteredJoy1X = applyAxisFilter(filteredJoy1X, receivedData.joy1X);
+    updateAxisCenter(joy1XCenter, filteredJoy1X);
+    int joy1XStep = mapJoystickToStep(filteredJoy1X, joy1XCenter);
     // Nach links -> im Uhrzeigersinn, nach rechts -> gegen Uhrzeigersinn
     moveServoWithStep(5, -joy1XStep);
 
     // Joystick 2 X -> Servo 3
-    int joy2XStep = mapJoystickToStep(receivedData.joy2X);
+    filteredJoy2X = applyAxisFilter(filteredJoy2X, receivedData.joy2X);
+    updateAxisCenter(joy2XCenter, filteredJoy2X);
+    int joy2XStep = mapJoystickToStep(filteredJoy2X, joy2XCenter);
     // Nach links -> im Uhrzeigersinn, nach rechts -> gegen Uhrzeigersinn
     moveServoWithStep(4, -joy2XStep);
 
     // Joystick 2 Y -> Servo 2
-    int joy2YStep = mapJoystickToStep(receivedData.joy2Y);
+    filteredJoy2Y = applyAxisFilter(filteredJoy2Y, receivedData.joy2Y);
+    updateAxisCenter(joy2YCenter, filteredJoy2Y);
+    int joy2YStep = mapJoystickToStep(filteredJoy2Y, joy2YCenter);
     // Nach oben -> gegen Uhrzeigersinn, nach unten -> im Uhrzeigersinn
     moveServoWithStep(3, joy2YStep);
 
