@@ -13,16 +13,13 @@ const int ARDUINO_RX2_PIN = 16; // optional, nicht verkabelt
 const int ARDUINO_TX2_PIN = 17; // an Arduino RX
 const int ARDUINO_BAUD = 9600;
 
-// ======================
-// Demo: nur Servo 7
-// ======================
-// Im Arduino-Code entspricht "7" dem letzten Servo-Index
-// (servoChannels[6] = 7 auf dem PCA9685 Shield)
-const int TARGET_SERVO_INDEX = 7;
 const int SERVO_MIN_ANGLE = 0;
 const int SERVO_MAX_ANGLE = 180;
-const int SERVO_STEP_ANGLE = 2;
+const int BASE_SERVO_STEP_ANGLE = 2;
+const int FAST_BUTTON_STEP_ANGLE = BASE_SERVO_STEP_ANGLE * 5; // 5x schneller für D12/D14
 const unsigned long MOVE_REPEAT_MS = 50;
+const int JOYSTICK_CENTER = 2048;
+const int JOYSTICK_DEADZONE = 250;
 
 // Entprellzeit für Reset-Taster
 const unsigned long BUTTON_DEBOUNCE_MS = 120;
@@ -30,10 +27,10 @@ const unsigned long BUTTON_DEBOUNCE_MS = 120;
 unsigned long lastButton1Time = 0;
 unsigned long lastMoveStepTime = 0;
 bool lastResetPressed = false;
-int lastSentAngle = -1;
-int currentServoAngle = 90;
+int lastSentAngle[8];
+int currentServoAngles[8];
 
-// Daten vom Master (Joystick-Felder sind aktuell ohne Funktion)
+// Daten vom Master
 typedef struct struct_message {
   int joy1X;
   int joy1Y;
@@ -45,25 +42,32 @@ typedef struct struct_message {
   bool rotateCwPressed;
   bool rotateCcwPressed;
   bool resetPressed;
+  bool servo0CcwPressed;
+  bool servo0CwPressed;
 } struct_message;
 
 struct_message receivedData;
 
-void sendServoAngleToArduino(int angle) {
-  angle = constrain(angle, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
-
-  // Nur senden, wenn sich der Wert geändert hat
-  if (angle == lastSentAngle) {
+void sendServoAngleToArduino(int servoIndex, int angle) {
+  if (servoIndex < 0 || servoIndex > 7) {
     return;
   }
 
-  ArduinoSerial.print(TARGET_SERVO_INDEX);
+  angle = constrain(angle, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
+
+  // Nur senden, wenn sich der Wert geändert hat
+  if (angle == lastSentAngle[servoIndex]) {
+    return;
+  }
+
+  ArduinoSerial.print(servoIndex);
   ArduinoSerial.print(' ');
   ArduinoSerial.println(angle);
-  lastSentAngle = angle;
+  lastSentAngle[servoIndex] = angle;
+  currentServoAngles[servoIndex] = angle;
 
   Serial.print("-> Arduino CMD: ");
-  Serial.print(TARGET_SERVO_INDEX);
+  Serial.print(servoIndex);
   Serial.print(' ');
   Serial.println(angle);
 }
@@ -72,12 +76,31 @@ void sendResetAllToArduino() {
   for (int servoIndex = 1; servoIndex <= 7; servoIndex++) {
     ArduinoSerial.print(servoIndex);
     ArduinoSerial.println(" 90");
+    currentServoAngles[servoIndex] = 90;
+    lastSentAngle[servoIndex] = 90;
+  }
+  Serial.println("Alle Servos RESET -> 90°");
+}
+
+int mapJoystickToStep(int axisValue) {
+  int delta = axisValue - JOYSTICK_CENTER;
+  int absDelta = abs(delta);
+  if (absDelta <= JOYSTICK_DEADZONE) {
+    return 0;
   }
 
-  currentServoAngle = 90;
-  lastSentAngle = -1; // erlaube erneutes Senden des gleichen Winkels nach Komplett-Reset
-  sendServoAngleToArduino(currentServoAngle);
-  Serial.println("Alle Servos RESET -> 90°");
+  int maxDelta = JOYSTICK_CENTER - JOYSTICK_DEADZONE;
+  int clampedDelta = min(absDelta - JOYSTICK_DEADZONE, maxDelta);
+  int step = map(clampedDelta, 0, maxDelta, 1, 10);
+  return (delta > 0) ? step : -step;
+}
+
+void moveServoWithStep(int servoIndex, int deltaStep) {
+  if (deltaStep == 0) {
+    return;
+  }
+  int nextAngle = constrain(currentServoAngles[servoIndex] + deltaStep, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
+  sendServoAngleToArduino(servoIndex, nextAngle);
 }
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len) {
@@ -88,8 +111,8 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
   memcpy(&receivedData, incomingData, sizeof(receivedData));
 
-  bool cwPressed = receivedData.rotateCwPressed;
-  bool ccwPressed = receivedData.rotateCcwPressed;
+  bool cwPressed = receivedData.rotateCwPressed;     // D12 -> Servo 1 CW
+  bool ccwPressed = receivedData.rotateCcwPressed;   // D14 -> Servo 1 CCW
 
   // Reset nur bei echter Druck-Flanke + Entprellung (D13)
   if (receivedData.resetPressed && !lastResetPressed) {
@@ -99,17 +122,54 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     }
   }
 
-  // Drehung von Servo 7 nur mit D12 / D14 (gehalten = wiederholte Schritte)
+  // Servo-Logik:
+  // 1) Servo 1 über D12/D14 (5x schneller als vorher)
+  // 2) Servo 7 über Joystick-Buttons
+  // 3) Servo 0 über D2/D4
+  // 4) Servo 2/3/4/5 proportional über Joystick-Achsen
   if (millis() - lastMoveStepTime >= MOVE_REPEAT_MS) {
+    // Servo 1 (Shield-Pin 1): D12/D14
     if (cwPressed && !ccwPressed) {
-      currentServoAngle = constrain(currentServoAngle + SERVO_STEP_ANGLE, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
-      sendServoAngleToArduino(currentServoAngle);
-      lastMoveStepTime = millis();
+      moveServoWithStep(2, FAST_BUTTON_STEP_ANGLE);
     } else if (ccwPressed && !cwPressed) {
-      currentServoAngle = constrain(currentServoAngle - SERVO_STEP_ANGLE, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
-      sendServoAngleToArduino(currentServoAngle);
-      lastMoveStepTime = millis();
+      moveServoWithStep(2, -FAST_BUTTON_STEP_ANGLE);
     }
+
+    // Servo 7: Joystick-Buttons
+    if (receivedData.joy1Pressed && !receivedData.joy2Pressed) {
+      moveServoWithStep(7, BASE_SERVO_STEP_ANGLE);
+    } else if (receivedData.joy2Pressed && !receivedData.joy1Pressed) {
+      moveServoWithStep(7, -BASE_SERVO_STEP_ANGLE);
+    }
+
+    // Servo 0: D2/D4
+    if (receivedData.servo0CwPressed && !receivedData.servo0CcwPressed) {
+      moveServoWithStep(1, BASE_SERVO_STEP_ANGLE);
+    } else if (receivedData.servo0CcwPressed && !receivedData.servo0CwPressed) {
+      moveServoWithStep(1, -BASE_SERVO_STEP_ANGLE);
+    }
+
+    // Joystick 1 Y -> Servo 5 und 6 gleichlaufend (im Arduino: Index 6 steuert Pin 5+6)
+    int joy1YStep = mapJoystickToStep(receivedData.joy1Y);
+    // Nach unten -> gegen Uhrzeigersinn, nach oben -> im Uhrzeigersinn
+    moveServoWithStep(6, -joy1YStep);
+
+    // Joystick 1 X -> Servo 4
+    int joy1XStep = mapJoystickToStep(receivedData.joy1X);
+    // Nach links -> im Uhrzeigersinn, nach rechts -> gegen Uhrzeigersinn
+    moveServoWithStep(5, -joy1XStep);
+
+    // Joystick 2 X -> Servo 3
+    int joy2XStep = mapJoystickToStep(receivedData.joy2X);
+    // Nach links -> im Uhrzeigersinn, nach rechts -> gegen Uhrzeigersinn
+    moveServoWithStep(4, -joy2XStep);
+
+    // Joystick 2 Y -> Servo 2
+    int joy2YStep = mapJoystickToStep(receivedData.joy2Y);
+    // Nach oben -> gegen Uhrzeigersinn, nach unten -> im Uhrzeigersinn
+    moveServoWithStep(3, joy2YStep);
+
+    lastMoveStepTime = millis();
   }
 
   lastResetPressed = receivedData.resetPressed;
@@ -120,13 +180,21 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   Serial.print(ccwPressed);
   Serial.print(" | RESET: ");
   Serial.print(receivedData.resetPressed);
-  Serial.print(" | Servo7: ");
-  Serial.println(currentServoAngle);
+  Serial.print(" | S1: ");
+  Serial.print(currentServoAngles[2]);
+  Serial.print(" | S7: ");
+  Serial.print(currentServoAngles[7]);
+  Serial.print(" | S0: ");
+  Serial.println(currentServoAngles[1]);
 }
 
 void setup() {
   Serial.begin(115200);
   delay(500);
+  for (int i = 0; i < 8; i++) {
+    currentServoAngles[i] = 90;
+    lastSentAngle[i] = -1;
+  }
 
   ArduinoSerial.begin(ARDUINO_BAUD, SERIAL_8N1, ARDUINO_RX2_PIN, ARDUINO_TX2_PIN);
 
