@@ -18,11 +18,16 @@ const int SERVO_MAX_ANGLE = 180;
 const int BASE_SERVO_STEP_ANGLE = 2;
 const int FAST_BUTTON_STEP_ANGLE = BASE_SERVO_STEP_ANGLE * 5; // 5x schneller für D12/D14
 const int JOYSTICK_BUTTON_STEP_ANGLE = BASE_SERVO_STEP_ANGLE * 4; // Pin 7 über Joystick-Buttons 4x schneller
-const int SERVO0_BUTTON_STEP_ANGLE = BASE_SERVO_STEP_ANGLE * 3; // D2/D4 etwas kräftiger
+const int SERVO0_BUTTON_STEP_ANGLE = BASE_SERVO_STEP_ANGLE * 3; // D22/D23 etwas kräftiger
 const unsigned long MOVE_REPEAT_MS = 50;
 const int DEFAULT_JOYSTICK_CENTER = 2048;
 const int JOYSTICK_DEADZONE = 460;
-const int MIN_AXIS_STEP_TRIGGER = 2;
+const int JOYSTICK_SLOW_PERCENT = 30;
+const int JOYSTICK_MEDIUM_PERCENT = 60;
+const int JOYSTICK_SLOW_STEP = 2;
+const int JOYSTICK_MEDIUM_STEP = 5;
+const int JOYSTICK_FAST_STEP = 8;
+const int JOYSTICK_STEP_RAMP_PER_TICK = 1;
 
 // Entprellzeit für Reset-Taster
 const unsigned long BUTTON_DEBOUNCE_MS = 120;
@@ -40,6 +45,10 @@ int joy1XCenter = DEFAULT_JOYSTICK_CENTER;
 int joy1YCenter = DEFAULT_JOYSTICK_CENTER;
 int joy2XCenter = DEFAULT_JOYSTICK_CENTER;
 int joy2YCenter = DEFAULT_JOYSTICK_CENTER;
+int smoothJoy1XStep = 0;
+int smoothJoy1YStep = 0;
+int smoothJoy2XStep = 0;
+int smoothJoy2YStep = 0;
 
 // Daten vom Master
 typedef struct struct_message {
@@ -113,12 +122,29 @@ int mapJoystickToStep(int axisValue, int axisCenter) {
   }
 
   int maxDelta = DEFAULT_JOYSTICK_CENTER - JOYSTICK_DEADZONE;
-  int clampedDelta = min(absDelta - JOYSTICK_DEADZONE, maxDelta);
-  int step = map(clampedDelta, 0, maxDelta, 1, 10);
-  if (step < MIN_AXIS_STEP_TRIGGER) {
-    return 0;
+  int clampedDelta = min(absDelta, DEFAULT_JOYSTICK_CENTER) - JOYSTICK_DEADZONE;
+  int percent = (clampedDelta * 100) / maxDelta;
+
+  int stepMagnitude = JOYSTICK_FAST_STEP;
+  if (percent <= JOYSTICK_SLOW_PERCENT) {
+    stepMagnitude = JOYSTICK_SLOW_STEP;
+  } else if (percent <= JOYSTICK_MEDIUM_PERCENT) {
+    stepMagnitude = JOYSTICK_MEDIUM_STEP;
   }
-  return (delta > 0) ? step : -step;
+
+  return (delta > 0) ? stepMagnitude : -stepMagnitude;
+}
+
+int smoothStepTransition(int currentStep, int targetStep) {
+  if (currentStep == targetStep) {
+    return currentStep;
+  }
+
+  if (currentStep < targetStep) {
+    return min(currentStep + JOYSTICK_STEP_RAMP_PER_TICK, targetStep);
+  }
+
+  return max(currentStep - JOYSTICK_STEP_RAMP_PER_TICK, targetStep);
 }
 
 void moveServoWithStep(int servoIndex, int deltaStep) {
@@ -151,7 +177,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   // Servo-Logik:
   // 1) Servo 1 über D12/D14 (5x schneller als vorher)
   // 2) Servo 7 über Joystick-Buttons
-  // 3) Servo 0 über D2/D4
+  // 3) Servo 0 über D22/D23
   // 4) Servo 2/3/4/5 proportional über Joystick-Achsen
   if (millis() - lastMoveStepTime >= MOVE_REPEAT_MS) {
     // Servo 1 (Shield-Pin 1): D12/D14
@@ -168,7 +194,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
       moveServoWithStep(7, -JOYSTICK_BUTTON_STEP_ANGLE);
     }
 
-    // Servo 0: D2/D4
+    // Servo 0: D22/D23
     if (receivedData.servo0CwPressed && !receivedData.servo0CcwPressed) {
       moveServoWithStep(1, SERVO0_BUTTON_STEP_ANGLE);
     } else if (receivedData.servo0CcwPressed && !receivedData.servo0CwPressed) {
@@ -179,29 +205,33 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     filteredJoy1Y = applyAxisFilter(filteredJoy1Y, receivedData.joy1Y);
     updateAxisCenter(joy1YCenter, filteredJoy1Y);
     int joy1YStep = mapJoystickToStep(filteredJoy1Y, joy1YCenter);
+    smoothJoy1YStep = smoothStepTransition(smoothJoy1YStep, joy1YStep);
     // Nach unten -> gegen Uhrzeigersinn, nach oben -> im Uhrzeigersinn
-    moveServoWithStep(6, -joy1YStep);
+    moveServoWithStep(6, -smoothJoy1YStep);
 
     // Joystick 1 X -> Servo 4
     filteredJoy1X = applyAxisFilter(filteredJoy1X, receivedData.joy1X);
     updateAxisCenter(joy1XCenter, filteredJoy1X);
     int joy1XStep = mapJoystickToStep(filteredJoy1X, joy1XCenter);
+    smoothJoy1XStep = smoothStepTransition(smoothJoy1XStep, joy1XStep);
     // Nach links -> im Uhrzeigersinn, nach rechts -> gegen Uhrzeigersinn
-    moveServoWithStep(5, -joy1XStep);
+    moveServoWithStep(5, -smoothJoy1XStep);
 
     // Joystick 2 X -> Servo 3
     filteredJoy2X = applyAxisFilter(filteredJoy2X, receivedData.joy2X);
     updateAxisCenter(joy2XCenter, filteredJoy2X);
     int joy2XStep = mapJoystickToStep(filteredJoy2X, joy2XCenter);
+    smoothJoy2XStep = smoothStepTransition(smoothJoy2XStep, joy2XStep);
     // Nach links -> im Uhrzeigersinn, nach rechts -> gegen Uhrzeigersinn
-    moveServoWithStep(4, -joy2XStep);
+    moveServoWithStep(4, -smoothJoy2XStep);
 
     // Joystick 2 Y -> Servo 2
     filteredJoy2Y = applyAxisFilter(filteredJoy2Y, receivedData.joy2Y);
     updateAxisCenter(joy2YCenter, filteredJoy2Y);
     int joy2YStep = mapJoystickToStep(filteredJoy2Y, joy2YCenter);
+    smoothJoy2YStep = smoothStepTransition(smoothJoy2YStep, joy2YStep);
     // Nach oben -> gegen Uhrzeigersinn, nach unten -> im Uhrzeigersinn
-    moveServoWithStep(3, joy2YStep);
+    moveServoWithStep(3, smoothJoy2YStep);
 
     lastMoveStepTime = millis();
   }
