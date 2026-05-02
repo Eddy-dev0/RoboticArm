@@ -19,6 +19,7 @@ const int LINKED_SERVO_CHANNEL = 6; // folgt Servo auf Channel 5 gleichlaufend
 const int SERVO_MIN_PULSE = 500;
 const int SERVO_MAX_PULSE = 2500;
 const int PULSE_FREQ = 50;
+const bool LINKED_SERVO_INVERT_DIRECTION = true;
 
 // Variables de control
 float currentPositions[TOTAL_SERVOS];
@@ -66,6 +67,18 @@ void setServoAngleIfChanged(int channel, float angle) {
   }
 }
 
+float mapAngleForLinkedServo(float sourceAngle) {
+  if (LINKED_SERVO_INVERT_DIRECTION) {
+    return MAX_SERVO_VALUE - sourceAngle;
+  }
+  return sourceAngle;
+}
+
+void setLinkedServoFromSource(float sourceAngle) {
+  float linkedAngle = constrain(mapAngleForLinkedServo(sourceAngle), MIN_SERVO_VALUE, MAX_SERVO_VALUE);
+  setServoAngleIfChanged(LINKED_SERVO_CHANNEL, linkedAngle);
+}
+
 void setup() {
   Serial.begin(9600);
   inputBuffer.reserve(200);
@@ -84,7 +97,7 @@ void setup() {
     targetPositions[i] = 90;
     setServoAngleIfChanged(servoChannels[i], 90);
   }
-  setServoAngleIfChanged(LINKED_SERVO_CHANNEL, 90);
+  setLinkedServoFromSource(90);
 }
 
 void loop() {
@@ -124,8 +137,8 @@ void loop() {
           currentPositions[i] = targetPositions[i];
         }
 
-        if (i == 5) { // Servo del antebrazo -> Channel 6 gleichlaufend mit Channel 5
-          setServoAngleIfChanged(LINKED_SERVO_CHANNEL, currentPositions[i]);
+        if (i == 5) { // Servo del antebrazo -> Channel 6 folgt Channel 5 (ggf. invertiert)
+          setLinkedServoFromSource(currentPositions[i]);
         }
 
         setServoAngleIfChanged(servoChannels[i], currentPositions[i]);
@@ -184,7 +197,7 @@ void processSerialCommand(String command) {
         currentPositions[servoIndex] = position;
 
         if (servoIndex == 5) {
-          setServoAngleIfChanged(LINKED_SERVO_CHANNEL, position);
+          setLinkedServoFromSource(position);
         }
 
         setServoAngleIfChanged(servoChannels[servoIndex], position);
