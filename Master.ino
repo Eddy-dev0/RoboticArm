@@ -93,7 +93,7 @@ void updateSensitivityLeds() {
 }
 
 
-void runStartupSensitivityAnimation() {
+void runStartupSensitivityLedAnimation() {
   const int stepDelayMs = 60;
 
   for (int i = 0; i < 4; i++) {
@@ -201,7 +201,7 @@ void setup() {
   ledcAttach(LED4_PIN, 5000, 8);
 
   lastEncoderClk = digitalRead(ENC_CLK_PIN);
-  runStartupSensitivityAnimation();
+  runStartupSensitivityLedAnimation();
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
