@@ -93,6 +93,64 @@ void updateSensitivityLeds() {
 }
 
 
+void runStartupSensitivityAnimation() {
+  const int stepDelayMs = 60;
+
+  for (int i = 0; i < 4; i++) {
+    ledcWrite(LED1_PIN, 0);
+    ledcWrite(LED2_PIN, 0);
+    ledcWrite(LED3_PIN, 0);
+    ledcWrite(LED4_PIN, 0);
+    if (i == 0) ledcWrite(LED1_PIN, MAX_PWM);
+    if (i == 1) ledcWrite(LED2_PIN, MAX_PWM);
+    if (i == 2) ledcWrite(LED3_PIN, MAX_PWM);
+    if (i == 3) ledcWrite(LED4_PIN, MAX_PWM);
+    delay(stepDelayMs);
+  }
+
+  for (int i = 3; i >= 0; i--) {
+    ledcWrite(LED1_PIN, 0);
+    ledcWrite(LED2_PIN, 0);
+    ledcWrite(LED3_PIN, 0);
+    ledcWrite(LED4_PIN, 0);
+    if (i == 0) ledcWrite(LED1_PIN, MAX_PWM);
+    if (i == 1) ledcWrite(LED2_PIN, MAX_PWM);
+    if (i == 2) ledcWrite(LED3_PIN, MAX_PWM);
+    if (i == 3) ledcWrite(LED4_PIN, MAX_PWM);
+    delay(stepDelayMs);
+  }
+
+  sensitivityLevel = START_SENSITIVITY;
+  updateSensitivityLeds();
+}
+
+
+void runStartupSensitivityAnimation() {
+  const int stepDelayMs = 60;
+
+  for (int i = 0; i < 4; i++) {
+    ledcWrite(0, 0);
+    ledcWrite(1, 0);
+    ledcWrite(2, 0);
+    ledcWrite(3, 0);
+    ledcWrite(i, MAX_PWM);
+    delay(stepDelayMs);
+  }
+
+  for (int i = 3; i >= 0; i--) {
+    ledcWrite(0, 0);
+    ledcWrite(1, 0);
+    ledcWrite(2, 0);
+    ledcWrite(3, 0);
+    ledcWrite(i, MAX_PWM);
+    delay(stepDelayMs);
+  }
+
+  sensitivityLevel = START_SENSITIVITY;
+  updateSensitivityLeds();
+}
+
+
 void handleEncoder() {
   const unsigned long ENCODER_STEP_DEBOUNCE_MS = 2;
   int currentClk = digitalRead(ENC_CLK_PIN);
@@ -169,37 +227,7 @@ void setup() {
   ledcAttach(LED4_PIN, 5000, 8);
 
   lastEncoderClk = digitalRead(ENC_CLK_PIN);
-  {
-    const int stepDelayMs = 60;
-
-    for (int i = 0; i < 4; i++) {
-      ledcWrite(LED1_PIN, 0);
-      ledcWrite(LED2_PIN, 0);
-      ledcWrite(LED3_PIN, 0);
-      ledcWrite(LED4_PIN, 0);
-      if (i == 0) ledcWrite(LED1_PIN, MAX_PWM);
-      if (i == 1) ledcWrite(LED2_PIN, MAX_PWM);
-      if (i == 2) ledcWrite(LED3_PIN, MAX_PWM);
-      if (i == 3) ledcWrite(LED4_PIN, MAX_PWM);
-      delay(stepDelayMs);
-    }
-
-    for (int i = 3; i >= 0; i--) {
-      ledcWrite(LED1_PIN, 0);
-      ledcWrite(LED2_PIN, 0);
-      ledcWrite(LED3_PIN, 0);
-      ledcWrite(LED4_PIN, 0);
-      if (i == 0) ledcWrite(LED1_PIN, MAX_PWM);
-      if (i == 1) ledcWrite(LED2_PIN, MAX_PWM);
-      if (i == 2) ledcWrite(LED3_PIN, MAX_PWM);
-      if (i == 3) ledcWrite(LED4_PIN, MAX_PWM);
-      delay(stepDelayMs);
-    }
-
-    sensitivityLevel = START_SENSITIVITY;
-    updateSensitivityLeds();
-  }
-
+  runStartupSensitivityAnimation();
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
