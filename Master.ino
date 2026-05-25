@@ -61,6 +61,7 @@ typedef struct struct_message {
 struct_message dataToSend;
 int sensitivityLevel = START_SENSITIVITY;
 int lastEncoderClk = HIGH;
+unsigned long lastEncoderStepMs = 0;
 bool slaveConnected = false;
 unsigned long lastSuccessSendMs = 0;
 unsigned long lastBlinkToggleMs = 0;
@@ -85,10 +86,42 @@ void updateSensitivityLeds() {
     }
   }
 
-  ledcWrite(0, values[0]);
-  ledcWrite(1, values[1]);
-  ledcWrite(2, values[2]);
-  ledcWrite(3, values[3]);
+  ledcWrite(LED1_PIN, values[0]);
+  ledcWrite(LED2_PIN, values[1]);
+  ledcWrite(LED3_PIN, values[2]);
+  ledcWrite(LED4_PIN, values[3]);
+}
+
+
+void runStartupSensitivityAnimation() {
+  const int stepDelayMs = 60;
+
+  for (int i = 0; i < 4; i++) {
+    ledcWrite(LED1_PIN, 0);
+    ledcWrite(LED2_PIN, 0);
+    ledcWrite(LED3_PIN, 0);
+    ledcWrite(LED4_PIN, 0);
+    if (i == 0) ledcWrite(LED1_PIN, MAX_PWM);
+    if (i == 1) ledcWrite(LED2_PIN, MAX_PWM);
+    if (i == 2) ledcWrite(LED3_PIN, MAX_PWM);
+    if (i == 3) ledcWrite(LED4_PIN, MAX_PWM);
+    delay(stepDelayMs);
+  }
+
+  for (int i = 3; i >= 0; i--) {
+    ledcWrite(LED1_PIN, 0);
+    ledcWrite(LED2_PIN, 0);
+    ledcWrite(LED3_PIN, 0);
+    ledcWrite(LED4_PIN, 0);
+    if (i == 0) ledcWrite(LED1_PIN, MAX_PWM);
+    if (i == 1) ledcWrite(LED2_PIN, MAX_PWM);
+    if (i == 2) ledcWrite(LED3_PIN, MAX_PWM);
+    if (i == 3) ledcWrite(LED4_PIN, MAX_PWM);
+    delay(stepDelayMs);
+  }
+
+  sensitivityLevel = START_SENSITIVITY;
+  updateSensitivityLeds();
 }
 
 
@@ -118,9 +151,13 @@ void runStartupSensitivityAnimation() {
 }
 
 void handleEncoder() {
+  const unsigned long ENCODER_STEP_DEBOUNCE_MS = 2;
   int currentClk = digitalRead(ENC_CLK_PIN);
-  if (currentClk != lastEncoderClk) {
-    if (digitalRead(ENC_DT_PIN) != currentClk) {
+  unsigned long now = millis();
+
+  // nur auf fallende Flanke reagieren (robuster gegen Prellen und Fehlschritte)
+  if (lastEncoderClk == HIGH && currentClk == LOW && (now - lastEncoderStepMs) >= ENCODER_STEP_DEBOUNCE_MS) {
+    if (digitalRead(ENC_DT_PIN) == HIGH) {
       sensitivityLevel++;
     } else {
       sensitivityLevel--;
@@ -130,6 +167,7 @@ void handleEncoder() {
     updateSensitivityLeds();
     Serial.print("Encoder -> Sensitivity: ");
     Serial.println(sensitivityLevel);
+    lastEncoderStepMs = now;
   }
   lastEncoderClk = currentClk;
 
