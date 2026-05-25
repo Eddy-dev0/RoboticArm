@@ -61,7 +61,9 @@ typedef struct struct_message {
 struct_message dataToSend;
 int sensitivityLevel = START_SENSITIVITY;
 int lastEncoderClk = HIGH;
-unsigned long lastEncoderStepMs = 0;
+int8_t encoderQuarterSteps = 0;
+uint8_t lastEncoderState = 0;
+unsigned long lastSendMs = 0;
 bool slaveConnected = false;
 unsigned long lastSuccessSendMs = 0;
 unsigned long lastBlinkToggleMs = 0;
@@ -126,31 +128,48 @@ void runStartupSensitivityLedAnimation() {
 
 
 void handleEncoder() {
-  const unsigned long ENCODER_STEP_DEBOUNCE_MS = 2;
-  int currentClk = digitalRead(ENC_CLK_PIN);
-  unsigned long now = millis();
+  static const int8_t QUAD_TABLE[16] = {
+    0, -1, 1, 0,
+    1, 0, 0, -1,
+    -1, 0, 0, 1,
+    0, 1, -1, 0
+  };
 
-  // nur auf fallende Flanke reagieren (robuster gegen Prellen und Fehlschritte)
-  if (lastEncoderClk == HIGH && currentClk == LOW && (now - lastEncoderStepMs) >= ENCODER_STEP_DEBOUNCE_MS) {
-    if (digitalRead(ENC_DT_PIN) == HIGH) {
+  uint8_t clk = digitalRead(ENC_CLK_PIN);
+  uint8_t dt = digitalRead(ENC_DT_PIN);
+  uint8_t currentState = (clk << 1) | dt;
+  uint8_t transition = (lastEncoderState << 2) | currentState;
+  int8_t step = QUAD_TABLE[transition];
+
+  if (step != 0) {
+    encoderQuarterSteps += step;
+
+    if (encoderQuarterSteps >= 4) {
+      encoderQuarterSteps = 0;
       sensitivityLevel++;
-    } else {
+      sensitivityLevel = constrain(sensitivityLevel, START_SENSITIVITY, MAX_SENSITIVITY);
+      updateSensitivityLeds();
+      Serial.print("Encoder -> Sensitivity: ");
+      Serial.println(sensitivityLevel);
+    } else if (encoderQuarterSteps <= -4) {
+      encoderQuarterSteps = 0;
       sensitivityLevel--;
+      sensitivityLevel = constrain(sensitivityLevel, START_SENSITIVITY, MAX_SENSITIVITY);
+      updateSensitivityLeds();
+      Serial.print("Encoder -> Sensitivity: ");
+      Serial.println(sensitivityLevel);
     }
-
-    sensitivityLevel = constrain(sensitivityLevel, START_SENSITIVITY, MAX_SENSITIVITY);
-    updateSensitivityLeds();
-    Serial.print("Encoder -> Sensitivity: ");
-    Serial.println(sensitivityLevel);
-    lastEncoderStepMs = now;
   }
-  lastEncoderClk = currentClk;
 
-  if (digitalRead(ENC_SW_PIN) == LOW) {
+  lastEncoderState = currentState;
+
+  static unsigned long lastButtonMs = 0;
+  unsigned long now = millis();
+  if (digitalRead(ENC_SW_PIN) == LOW && (now - lastButtonMs) > 250) {
     sensitivityLevel = START_SENSITIVITY;
     updateSensitivityLeds();
     Serial.println("Encoder button -> Sensitivity reset");
-    delay(250);
+    lastButtonMs = now;
   }
 }
 
@@ -201,6 +220,7 @@ void setup() {
   ledcAttach(LED4_PIN, 5000, 8);
 
   lastEncoderClk = digitalRead(ENC_CLK_PIN);
+  lastEncoderState = (digitalRead(ENC_CLK_PIN) << 1) | digitalRead(ENC_DT_PIN);
   runStartupSensitivityLedAnimation();
 
   WiFi.mode(WIFI_STA);
@@ -244,9 +264,13 @@ void loop() {
   dataToSend.servo0CwPressed = readButtonState(BUTTON_SERVO0_CW_PIN, BUTTON_SERVO0_CW_ACTIVE_LOW);
   dataToSend.sensitivityLevel = sensitivityLevel;
 
-  esp_now_send(receiverMAC, (uint8_t *)&dataToSend, sizeof(dataToSend));
+  unsigned long now = millis();
+  if (now - lastSendMs >= 20) {
+    esp_now_send(receiverMAC, (uint8_t *)&dataToSend, sizeof(dataToSend));
+    lastSendMs = now;
+  }
 
   updateStatusLed();
 
-  delay(50);
+  delay(1);
 }
