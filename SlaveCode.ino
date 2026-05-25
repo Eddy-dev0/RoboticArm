@@ -22,9 +22,10 @@ const int SERVO0_BUTTON_STEP_ANGLE = BASE_SERVO_STEP_ANGLE * 3; // D22/D23 etwas
 const unsigned long MOVE_REPEAT_MS = 50;
 const int DEFAULT_JOYSTICK_CENTER = 2048;
 const int JOYSTICK_DEADZONE = 300;
-const int JOYSTICK_MEDIUM_PERCENT = 50;
-const int JOYSTICK_MEDIUM_STEP = 6;
-const int JOYSTICK_FAST_STEP = 10;
+const int SENSITIVITY_MIN = 1;
+const int SENSITIVITY_MAX = 32;
+const int JOYSTICK_STEP_MIN = 1;
+const int JOYSTICK_STEP_MAX = 14;
 
 // Entprellzeit für Reset-Taster
 const unsigned long BUTTON_DEBOUNCE_MS = 120;
@@ -61,6 +62,7 @@ typedef struct struct_message {
   bool resetPressed;
   bool servo0CcwPressed;
   bool servo0CwPressed;
+  int sensitivityLevel;
 } struct_message;
 
 struct_message receivedData;
@@ -111,7 +113,7 @@ void updateAxisCenter(int &centerValue, int filteredValue) {
   }
 }
 
-int mapJoystickToStep(int axisValue, int axisCenter) {
+int mapJoystickToStep(int axisValue, int axisCenter, int sensitivityLevel) {
   int delta = axisValue - axisCenter;
   int absDelta = abs(delta);
   if (absDelta <= JOYSTICK_DEADZONE) {
@@ -120,9 +122,11 @@ int mapJoystickToStep(int axisValue, int axisCenter) {
 
   int maxDelta = DEFAULT_JOYSTICK_CENTER - JOYSTICK_DEADZONE;
   int clampedDelta = min(absDelta, DEFAULT_JOYSTICK_CENTER) - JOYSTICK_DEADZONE;
-  int percent = (clampedDelta * 100) / maxDelta;
+  int joystickPercent = (clampedDelta * 100) / maxDelta;
 
-  int stepMagnitude = (percent <= JOYSTICK_MEDIUM_PERCENT) ? JOYSTICK_MEDIUM_STEP : JOYSTICK_FAST_STEP;
+  int sens = constrain(sensitivityLevel, SENSITIVITY_MIN, SENSITIVITY_MAX);
+  int sensitivityStep = map(sens, SENSITIVITY_MIN, SENSITIVITY_MAX, JOYSTICK_STEP_MIN, JOYSTICK_STEP_MAX);
+  int stepMagnitude = max(1, (joystickPercent * sensitivityStep) / 100);
 
   return (delta > 0) ? stepMagnitude : -stepMagnitude;
 }
@@ -184,7 +188,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     // Joystick 1 Y -> Servo 5 und 6 gleichlaufend (im Arduino: Index 6 steuert Pin 5+6)
     filteredJoy1Y = applyAxisFilter(filteredJoy1Y, receivedData.joy1Y);
     updateAxisCenter(joy1YCenter, filteredJoy1Y);
-    int joy1YStep = mapJoystickToStep(filteredJoy1Y, joy1YCenter);
+    int joy1YStep = mapJoystickToStep(filteredJoy1Y, joy1YCenter, receivedData.sensitivityLevel);
     smoothJoy1YStep = joy1YStep;
     // Nach unten -> gegen Uhrzeigersinn, nach oben -> im Uhrzeigersinn
     moveServoWithStep(6, -smoothJoy1YStep);
@@ -192,7 +196,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     // Joystick 1 X -> Servo 4
     filteredJoy1X = applyAxisFilter(filteredJoy1X, receivedData.joy1X);
     updateAxisCenter(joy1XCenter, filteredJoy1X);
-    int joy1XStep = mapJoystickToStep(filteredJoy1X, joy1XCenter);
+    int joy1XStep = mapJoystickToStep(filteredJoy1X, joy1XCenter, receivedData.sensitivityLevel);
     smoothJoy1XStep = joy1XStep;
     // Nach links -> im Uhrzeigersinn, nach rechts -> gegen Uhrzeigersinn
     moveServoWithStep(5, -smoothJoy1XStep);
@@ -200,7 +204,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     // Joystick 2 X -> Servo 3
     filteredJoy2X = applyAxisFilter(filteredJoy2X, receivedData.joy2X);
     updateAxisCenter(joy2XCenter, filteredJoy2X);
-    int joy2XStep = mapJoystickToStep(filteredJoy2X, joy2XCenter);
+    int joy2XStep = mapJoystickToStep(filteredJoy2X, joy2XCenter, receivedData.sensitivityLevel);
     smoothJoy2XStep = joy2XStep;
     // Nach links -> im Uhrzeigersinn, nach rechts -> gegen Uhrzeigersinn
     moveServoWithStep(4, -smoothJoy2XStep);
@@ -208,7 +212,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     // Joystick 2 Y -> Servo 2
     filteredJoy2Y = applyAxisFilter(filteredJoy2Y, receivedData.joy2Y);
     updateAxisCenter(joy2YCenter, filteredJoy2Y);
-    int joy2YStep = mapJoystickToStep(filteredJoy2Y, joy2YCenter);
+    int joy2YStep = mapJoystickToStep(filteredJoy2Y, joy2YCenter, receivedData.sensitivityLevel);
     smoothJoy2YStep = joy2YStep;
     // Nach oben -> gegen Uhrzeigersinn, nach unten -> im Uhrzeigersinn
     moveServoWithStep(3, smoothJoy2YStep);
@@ -229,7 +233,9 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   Serial.print(" | S7: ");
   Serial.print(currentServoAngles[7]);
   Serial.print(" | S0: ");
-  Serial.println(currentServoAngles[1]);
+  Serial.print(currentServoAngles[1]);
+  Serial.print(" | Sens: ");
+  Serial.println(receivedData.sensitivityLevel);
 }
 
 void setup() {
