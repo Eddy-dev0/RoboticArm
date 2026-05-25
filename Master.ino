@@ -125,32 +125,6 @@ void runStartupSensitivityAnimation() {
 }
 
 
-void runStartupSensitivityAnimation() {
-  const int stepDelayMs = 60;
-
-  for (int i = 0; i < 4; i++) {
-    ledcWrite(0, 0);
-    ledcWrite(1, 0);
-    ledcWrite(2, 0);
-    ledcWrite(3, 0);
-    ledcWrite(i, MAX_PWM);
-    delay(stepDelayMs);
-  }
-
-  for (int i = 3; i >= 0; i--) {
-    ledcWrite(0, 0);
-    ledcWrite(1, 0);
-    ledcWrite(2, 0);
-    ledcWrite(3, 0);
-    ledcWrite(i, MAX_PWM);
-    delay(stepDelayMs);
-  }
-
-  sensitivityLevel = START_SENSITIVITY;
-  updateSensitivityLeds();
-}
-
-
 void handleEncoder() {
   const unsigned long ENCODER_STEP_DEBOUNCE_MS = 2;
   int currentClk = digitalRead(ENC_CLK_PIN);
