@@ -39,12 +39,6 @@ const int START_SENSITIVITY = 1;
 const int MAX_SENSITIVITY = 32;
 const int MIN_PWM = 5;
 const int MAX_PWM = 127;
-const int LED_PWM_FREQ = 5000;
-const int LED_PWM_RESOLUTION = 8;
-const int LED1_CH = 0;
-const int LED2_CH = 1;
-const int LED3_CH = 2;
-const int LED4_CH = 3;
 
 uint8_t receiverMAC[] = {0x80, 0xF3, 0xDA, 0xBA, 0xA3, 0xF8};
 
@@ -91,10 +85,10 @@ void updateSensitivityLeds() {
     }
   }
 
-  ledcWrite(LED1_CH, values[0]);
-  ledcWrite(LED2_CH, values[1]);
-  ledcWrite(LED3_CH, values[2]);
-  ledcWrite(LED4_CH, values[3]);
+  ledcWrite(0, values[0]);
+  ledcWrite(1, values[1]);
+  ledcWrite(2, values[2]);
+  ledcWrite(3, values[3]);
 }
 
 void handleEncoder() {
@@ -164,14 +158,10 @@ void setup() {
   pinMode(STATUS_LED_PIN, OUTPUT);
   digitalWrite(STATUS_LED_PIN, LOW);
 
-  ledcSetup(LED1_CH, LED_PWM_FREQ, LED_PWM_RESOLUTION);
-  ledcSetup(LED2_CH, LED_PWM_FREQ, LED_PWM_RESOLUTION);
-  ledcSetup(LED3_CH, LED_PWM_FREQ, LED_PWM_RESOLUTION);
-  ledcSetup(LED4_CH, LED_PWM_FREQ, LED_PWM_RESOLUTION);
-  ledcAttachPin(LED1_PIN, LED1_CH);
-  ledcAttachPin(LED2_PIN, LED2_CH);
-  ledcAttachPin(LED3_PIN, LED3_CH);
-  ledcAttachPin(LED4_PIN, LED4_CH);
+  ledcAttach(LED1_PIN, 5000, 8);
+  ledcAttach(LED2_PIN, 5000, 8);
+  ledcAttach(LED3_PIN, 5000, 8);
+  ledcAttach(LED4_PIN, 5000, 8);
 
   lastEncoderClk = digitalRead(ENC_CLK_PIN);
   updateSensitivityLeds();
