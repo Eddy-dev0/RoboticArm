@@ -91,6 +91,32 @@ void updateSensitivityLeds() {
   ledcWrite(3, values[3]);
 }
 
+
+void runStartupSensitivityAnimation() {
+  const int stepDelayMs = 60;
+
+  for (int i = 0; i < 4; i++) {
+    ledcWrite(0, 0);
+    ledcWrite(1, 0);
+    ledcWrite(2, 0);
+    ledcWrite(3, 0);
+    ledcWrite(i, MAX_PWM);
+    delay(stepDelayMs);
+  }
+
+  for (int i = 3; i >= 0; i--) {
+    ledcWrite(0, 0);
+    ledcWrite(1, 0);
+    ledcWrite(2, 0);
+    ledcWrite(3, 0);
+    ledcWrite(i, MAX_PWM);
+    delay(stepDelayMs);
+  }
+
+  sensitivityLevel = START_SENSITIVITY;
+  updateSensitivityLeds();
+}
+
 void handleEncoder() {
   int currentClk = digitalRead(ENC_CLK_PIN);
   if (currentClk != lastEncoderClk) {
@@ -102,7 +128,7 @@ void handleEncoder() {
 
     sensitivityLevel = constrain(sensitivityLevel, START_SENSITIVITY, MAX_SENSITIVITY);
     updateSensitivityLeds();
-    Serial.print("Sensitivity: ");
+    Serial.print("Encoder -> Sensitivity: ");
     Serial.println(sensitivityLevel);
   }
   lastEncoderClk = currentClk;
@@ -110,15 +136,13 @@ void handleEncoder() {
   if (digitalRead(ENC_SW_PIN) == LOW) {
     sensitivityLevel = START_SENSITIVITY;
     updateSensitivityLeds();
-    Serial.println("Sensitivity reset");
+    Serial.println("Encoder button -> Sensitivity reset");
     delay(250);
   }
 }
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
   (void)info;
-  Serial.print("Sendestatus: ");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Erfolgreich" : "Fehler");
   if (status == ESP_NOW_SEND_SUCCESS) {
     lastSuccessSendMs = millis();
   }
@@ -164,7 +188,7 @@ void setup() {
   ledcAttach(LED4_PIN, 5000, 8);
 
   lastEncoderClk = digitalRead(ENC_CLK_PIN);
-  updateSensitivityLeds();
+  runStartupSensitivityAnimation();
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
