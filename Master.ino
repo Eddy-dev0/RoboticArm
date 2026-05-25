@@ -150,6 +150,7 @@ void runStartupSensitivityAnimation() {
   updateSensitivityLeds();
 }
 
+
 void handleEncoder() {
   const unsigned long ENCODER_STEP_DEBOUNCE_MS = 2;
   int currentClk = digitalRead(ENC_CLK_PIN);
