@@ -222,19 +222,43 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
   lastResetPressed = receivedData.resetPressed;
 
-  Serial.print("CW: ");
+  Serial.print("BTN CW:");
   Serial.print(cwPressed);
-  Serial.print(" | CCW: ");
+  Serial.print(" CCW:");
   Serial.print(ccwPressed);
-  Serial.print(" | RESET: ");
+  Serial.print(" RESET:");
   Serial.print(receivedData.resetPressed);
-  Serial.print(" | S1: ");
+  Serial.print(" S0-:");
+  Serial.print(receivedData.servo0CcwPressed);
+  Serial.print(" S0+:");
+  Serial.print(receivedData.servo0CwPressed);
+  Serial.print(" J1_BTN:");
+  Serial.print(receivedData.joy1Pressed);
+  Serial.print(" J2_BTN:");
+  Serial.print(receivedData.joy2Pressed);
+  Serial.print(" | J1(");
+  Serial.print(receivedData.joy1X);
+  Serial.print(",");
+  Serial.print(receivedData.joy1Y);
+  Serial.print(") step(");
+  Serial.print(smoothJoy1XStep);
+  Serial.print(",");
+  Serial.print(smoothJoy1YStep);
+  Serial.print(") | J2(");
+  Serial.print(receivedData.joy2X);
+  Serial.print(",");
+  Serial.print(receivedData.joy2Y);
+  Serial.print(") step(");
+  Serial.print(smoothJoy2XStep);
+  Serial.print(",");
+  Serial.print(smoothJoy2YStep);
+  Serial.print(") | Servo S1:");
   Serial.print(currentServoAngles[2]);
-  Serial.print(" | S7: ");
+  Serial.print(" S7:");
   Serial.print(currentServoAngles[7]);
-  Serial.print(" | S0: ");
+  Serial.print(" S0:");
   Serial.print(currentServoAngles[1]);
-  Serial.print(" | Sens: ");
+  Serial.print(" | Sens:");
   Serial.println(receivedData.sensitivityLevel);
 }
 
